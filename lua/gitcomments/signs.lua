@@ -1,52 +1,67 @@
 local M = {}
 
-local SIGN_GROUP = "gitcomments"
-local SIGN_NAME = "GitCommentsSign"
+-- Use the modern extmark API (available since Neovim 0.6) instead of the
+-- deprecated vim.fn.sign_* functions which can cause TUI rendering issues
+-- in Neovim 0.10+.
+local ns = nil
 
-local initialized = false
+local sign_text = ">>"
+local sign_hl   = "GitCommentsSign"
 
---- Define the sign (idempotent).
----@param sign_text string
----@param sign_hl string
-function M.define(sign_text, sign_hl)
-  if initialized then return end
-  initialized = true
+local function get_ns()
+  if not ns then
+    ns = vim.api.nvim_create_namespace("gitcomments")
+  end
+  return ns
+end
 
-  -- Ensure the highlight group exists (link to a sensible default if not set)
+--- Configure sign appearance (idempotent).
+---@param text string
+---@param hl string
+function M.define(text, hl)
+  sign_text = text ~= "" and text or ">>"
+  sign_hl   = hl
+
+  -- Ensure the highlight group exists
   if vim.fn.hlexists(sign_hl) == 0 then
     vim.api.nvim_set_hl(0, sign_hl, { link = "DiagnosticInfo", default = true })
   end
-
-  vim.fn.sign_define(SIGN_NAME, {
-    text = sign_text,
-    texthl = sign_hl,
-  })
 end
 
 --- Place signs for all given locations in a buffer.
 ---@param bufnr integer
----@param locations {path: string, line: integer}[] Locations relative to repo root
----@param buf_rel_path string The relative path of this buffer inside the repo
+---@param locations {path: string, line: integer}[]
+---@param buf_rel_path string
 function M.place(bufnr, locations, buf_rel_path)
-  -- Clear existing signs for this buffer first
   M.clear(bufnr)
 
   for _, loc in ipairs(locations) do
     if loc.path == buf_rel_path then
-      vim.fn.sign_place(0, SIGN_GROUP, SIGN_NAME, bufnr, { lnum = loc.line, priority = 10 })
+      local row = loc.line - 1 -- extmarks are 0-indexed
+      if row >= 0 then
+        pcall(vim.api.nvim_buf_set_extmark, bufnr, get_ns(), row, 0, {
+          sign_text     = sign_text,
+          sign_hl_group = sign_hl,
+          priority      = 10,
+        })
+      end
     end
   end
 end
 
---- Remove all gitcomments signs from a buffer.
+--- Remove all gitcomments extmark signs from a buffer.
 ---@param bufnr integer
 function M.clear(bufnr)
-  vim.fn.sign_unplace(SIGN_GROUP, { buffer = bufnr })
+  pcall(vim.api.nvim_buf_clear_namespace, bufnr, get_ns(), 0, -1)
 end
 
---- Remove all gitcomments signs globally.
+--- Remove all gitcomments extmark signs from every buffer.
 function M.clear_all()
-  vim.fn.sign_unplace(SIGN_GROUP)
+  for _, bufnr in ipairs(vim.api.nvim_list_bufs()) do
+    if vim.api.nvim_buf_is_valid(bufnr) then
+      pcall(vim.api.nvim_buf_clear_namespace, bufnr, get_ns(), 0, -1)
+    end
+  end
 end
 
 return M
