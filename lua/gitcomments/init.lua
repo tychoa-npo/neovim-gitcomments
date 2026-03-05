@@ -52,77 +52,92 @@ end
 --- Fetches from GitHub and refreshes signs in all open buffers of this repo.
 ---@param bufnr integer
 ---@param opts? {force: boolean}
+-- Status per repo root: "loading" | "loaded:N" | "error:msg" | nil
+local status = {}
+
+--- Small helper: show a notification only if triggered by the user (not auto-load).
+---@param msg string
+---@param level integer
+---@param user_initiated boolean
+local function notify(msg, level, user_initiated)
+  if user_initiated then
+    vim.notify("[gitcomments] " .. msg, level)
+  end
+end
+
 function M.load_comments(bufnr, opts)
   opts = opts or {}
+  local user = opts.force == true -- force = user explicitly called the command
 
   get_repo_root(bufnr, function(root)
-    local ok, err = pcall(function()
     if not root then return end
 
     -- Don't double-fetch unless forced
-    if comments.has_cache(root) and not opts.force then
+    if comments.has_cache(root) and not user then
       refresh_signs(bufnr, root)
       return
     end
 
     if loading[root] then return end
     loading[root] = true
+    status[root] = "loading"
 
     github.get_current_branch(root, function(branch)
-      local ok2, err2 = pcall(function()
       if not branch or branch == "HEAD" then
         loading[root] = false
+        status[root] = nil
         return
       end
 
       github.find_pr_for_branch(branch, function(pr_number, pr_err)
-        local ok3, err3 = pcall(function()
         if not pr_number then
           loading[root] = false
-          if pr_err then
-            vim.notify("[gitcomments] " .. pr_err, vim.log.levels.INFO)
-          end
+          status[root] = pr_err and ("error:" .. pr_err) or nil
+          notify(pr_err or "No open PR found", vim.log.levels.INFO, user)
           return
         end
 
-        vim.notify(string.format("[gitcomments] Loading comments for PR #%d…", pr_number), vim.log.levels.INFO)
+        notify(string.format("Loading comments for PR #%d…", pr_number), vim.log.levels.INFO, user)
 
         github.get_repo_info(root, function(repo_info, info_err)
-          local ok4, err4 = pcall(function()
           if not repo_info then
             loading[root] = false
-            vim.notify("[gitcomments] " .. (info_err or "Could not determine repo"), vim.log.levels.ERROR)
+            status[root] = "error:" .. (info_err or "unknown")
+            notify(info_err or "Could not determine repo", vim.log.levels.ERROR, user)
             return
           end
 
           github.fetch_review_comments(pr_number, repo_info.owner, repo_info.name, function(raw_comments, fetch_err)
-            local ok5, err5 = pcall(function()
             loading[root] = false
             if not raw_comments then
-              vim.notify("[gitcomments] Failed to fetch PR comments: " .. (fetch_err or ""), vim.log.levels.ERROR)
+              status[root] = "error:" .. (fetch_err or "unknown")
+              notify("Failed to fetch PR comments: " .. (fetch_err or ""), vim.log.levels.ERROR, user)
               return
             end
 
-            comments.store(root, raw_comments, config.options.resolved_threads)
+            local ok, err = pcall(function()
+              comments.store(root, raw_comments, config.options.resolved_threads)
 
-            -- Refresh signs in all buffers belonging to this repo
-            for _, b in ipairs(vim.api.nvim_list_bufs()) do
-              if vim.api.nvim_buf_is_loaded(b) then
-                refresh_signs(b, root)
+              for _, b in ipairs(vim.api.nvim_list_bufs()) do
+                if vim.api.nvim_buf_is_valid(b) and vim.api.nvim_buf_is_loaded(b) then
+                  refresh_signs(b, root)
+                end
               end
+            end)
+
+            if not ok then
+              status[root] = "error:" .. tostring(err)
+              notify("Error processing comments: " .. tostring(err), vim.log.levels.ERROR, user)
+              return
             end
 
             local count = #comments.all_locations(root)
-            vim.notify(string.format("[gitcomments] Loaded %d commented line(s) from PR #%d", count, pr_number), vim.log.levels.INFO)
-            end) if not ok5 then loading[root] = false; vim.notify("[gitcomments] ERROR (fetch): " .. tostring(err5), vim.log.levels.ERROR) end
+            status[root] = string.format("loaded:%d", count)
+            notify(string.format("Loaded %d commented line(s) from PR #%d", count, pr_number), vim.log.levels.INFO, user)
           end)
-          end) if not ok4 then loading[root] = false; vim.notify("[gitcomments] ERROR (repo_info): " .. tostring(err4), vim.log.levels.ERROR) end
         end)
-        end) if not ok3 then loading[root] = false; vim.notify("[gitcomments] ERROR (pr): " .. tostring(err3), vim.log.levels.ERROR) end
       end)
-      end) if not ok2 then loading[root] = false; vim.notify("[gitcomments] ERROR (branch): " .. tostring(err2), vim.log.levels.ERROR) end
     end)
-    end) if not ok then vim.notify("[gitcomments] ERROR (root): " .. tostring(err), vim.log.levels.ERROR) end
   end)
 end
 
@@ -144,7 +159,7 @@ function M.show_comment(bufnr)
     if not threads or #threads == 0 then
       -- If no cache yet, try loading first
       if not comments.has_cache(root) then
-        M.load_comments(bufnr, {})
+        M.load_comments(bufnr, { force = true })
         vim.notify("[gitcomments] Fetching PR comments, try again shortly", vim.log.levels.INFO)
       else
         vim.notify("[gitcomments] No PR comment on this line", vim.log.levels.INFO)
