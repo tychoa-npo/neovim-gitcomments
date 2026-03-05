@@ -10,7 +10,7 @@ local M = {}
 ---@field resolved_threads boolean Whether to show resolved review threads
 
 local defaults = {
-  auto_load = true,
+  auto_load = false,
   keymap = "<leader>gc",
   sign_text = ">>",
   sign_hl = "GitCommentsSign",

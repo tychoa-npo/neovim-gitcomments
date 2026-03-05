@@ -33,6 +33,11 @@ end
 ---@param locations {path: string, line: integer}[]
 ---@param buf_rel_path string
 function M.place(bufnr, locations, buf_rel_path)
+  -- Never touch extmarks during cmdline or operator-pending mode — doing so
+  -- while noice.nvim is rendering the cmdline float can cause a hard crash.
+  local mode = vim.api.nvim_get_mode().mode
+  if mode:find("^c") or mode:find("^r") then return end
+
   M.clear(bufnr)
 
   for _, loc in ipairs(locations) do

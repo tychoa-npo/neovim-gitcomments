@@ -75,14 +75,16 @@ vim.api.nvim_create_autocmd("BufReadPost", {
     if vim.bo[ev.buf].buftype ~= "" then return end
     if vim.api.nvim_buf_get_name(ev.buf) == "" then return end
 
-    vim.schedule(function()
+    -- Defer auto-load by 500 ms so the buffer is fully settled and we don't
+    -- fire during noice.nvim's CmdlineEnter processing.
+    vim.defer_fn(function()
       local ok, gc = pcall(require, "gitcomments")
       if not ok then return end
       local cfg = require("gitcomments.config")
       if cfg.options.auto_load then
         gc.load_comments(ev.buf, {})
       end
-    end)
+    end, 500)
   end,
   desc = "Auto-load PR comments on buffer open",
 })
