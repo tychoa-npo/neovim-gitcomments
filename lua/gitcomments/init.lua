@@ -84,24 +84,32 @@ function M.load_comments(bufnr, opts)
 
         vim.notify(string.format("[gitcomments] Loading comments for PR #%d…", pr_number), vim.log.levels.INFO)
 
-        github.fetch_review_threads(pr_number, function(threads, fetch_err)
-          loading[root] = false
-          if not threads then
-            vim.notify("[gitcomments] Failed to fetch PR comments: " .. (fetch_err or ""), vim.log.levels.ERROR)
+        github.get_repo_info(root, function(repo_info, info_err)
+          if not repo_info then
+            loading[root] = false
+            vim.notify("[gitcomments] " .. (info_err or "Could not determine repo"), vim.log.levels.ERROR)
             return
           end
 
-          comments.store(root, threads, config.options.resolved_threads)
-
-          -- Refresh signs in all buffers belonging to this repo
-          for _, b in ipairs(vim.api.nvim_list_bufs()) do
-            if vim.api.nvim_buf_is_loaded(b) then
-              refresh_signs(b, root)
+          github.fetch_review_comments(pr_number, repo_info.owner, repo_info.name, function(raw_comments, fetch_err)
+            loading[root] = false
+            if not raw_comments then
+              vim.notify("[gitcomments] Failed to fetch PR comments: " .. (fetch_err or ""), vim.log.levels.ERROR)
+              return
             end
-          end
 
-          local count = #comments.all_locations(root)
-          vim.notify(string.format("[gitcomments] Loaded %d commented line(s) from PR #%d", count, pr_number), vim.log.levels.INFO)
+            comments.store(root, raw_comments, config.options.resolved_threads)
+
+            -- Refresh signs in all buffers belonging to this repo
+            for _, b in ipairs(vim.api.nvim_list_bufs()) do
+              if vim.api.nvim_buf_is_loaded(b) then
+                refresh_signs(b, root)
+              end
+            end
+
+            local count = #comments.all_locations(root)
+            vim.notify(string.format("[gitcomments] Loaded %d commented line(s) from PR #%d", count, pr_number), vim.log.levels.INFO)
+          end)
         end)
       end)
     end)
