@@ -79,8 +79,8 @@ function M.show(threads)
   if #lines == 0 then return end
 
   local opts = config.options
-  local max_w = opts.max_comment_width
-  local max_h = opts.max_comment_height
+  local max_w = opts.max_comment_width or 80
+  local max_h = opts.max_comment_height or 20
 
   -- Calculate window dimensions
   local width = 0
@@ -124,16 +124,20 @@ function M.show(threads)
     focusable = false,
   })
 
-  -- Subtle background tint
-  vim.api.nvim_win_set_option(win, "winhl", "Normal:GitCommentsFloat,FloatBorder:GitCommentsFloatBorder")
-
-  -- Ensure highlight groups exist
+  -- Ensure highlight groups exist (define before applying)
   if vim.fn.hlexists("GitCommentsFloat") == 0 then
     vim.api.nvim_set_hl(0, "GitCommentsFloat", { link = "NormalFloat", default = true })
   end
   if vim.fn.hlexists("GitCommentsFloatBorder") == 0 then
     vim.api.nvim_set_hl(0, "GitCommentsFloatBorder", { link = "FloatBorder", default = true })
   end
+
+  -- nvim_set_option_value is available since Neovim 0.8 and is the future-proof API
+  vim.api.nvim_set_option_value(
+    "winhighlight",
+    "Normal:GitCommentsFloat,FloatBorder:GitCommentsFloatBorder",
+    { win = win }
+  )
 
   current_win = win
   current_buf = buf

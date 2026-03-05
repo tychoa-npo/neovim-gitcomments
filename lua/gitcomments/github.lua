@@ -1,30 +1,34 @@
 local M = {}
 
 --- Run a shell command asynchronously and call callback(ok, stdout, stderr).
+--- Uses vim.fn.jobstart for compatibility with Neovim 0.8+.
 ---@param cmd string[]
 ---@param callback fun(ok: boolean, stdout: string, stderr: string)
 local function run(cmd, callback)
-  local stdout_chunks = {}
-  local stderr_chunks = {}
+  local stdout_lines = {}
+  local stderr_lines = {}
 
-  vim.system(cmd, {
-    stdout = function(_, data)
-      if data then
-        table.insert(stdout_chunks, data)
+  vim.fn.jobstart(cmd, {
+    on_stdout = function(_, data)
+      for _, line in ipairs(data) do
+        if line ~= "" then
+          table.insert(stdout_lines, line)
+        end
       end
     end,
-    stderr = function(_, data)
-      if data then
-        table.insert(stderr_chunks, data)
+    on_stderr = function(_, data)
+      for _, line in ipairs(data) do
+        if line ~= "" then
+          table.insert(stderr_lines, line)
+        end
       end
     end,
-  }, function(obj)
-    local out = table.concat(stdout_chunks)
-    local err = table.concat(stderr_chunks)
-    vim.schedule(function()
-      callback(obj.code == 0, out, err)
-    end)
-  end)
+    on_exit = function(_, exit_code)
+      local out = table.concat(stdout_lines, "\n")
+      local err = table.concat(stderr_lines, "\n")
+      callback(exit_code == 0, out, err)
+    end,
+  })
 end
 
 --- Get the git repository root for the given directory.
