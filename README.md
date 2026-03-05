@@ -26,7 +26,7 @@ gh auth login
 ### [lazy.nvim](https://github.com/folke/lazy.nvim)
 ```lua
 {
-  "tatsma/neovim-gitcomments",
+  "tychoa-npo/neovim-gitcomments",
   event = "BufReadPost",
   config = function()
     require("gitcomments").setup()
@@ -37,7 +37,7 @@ gh auth login
 ### [packer.nvim](https://github.com/wbthomason/packer.nvim)
 ```lua
 use {
-  "tatsma/neovim-gitcomments",
+  "tychoa-npo/neovim-gitcomments",
   config = function()
     require("gitcomments").setup()
   end,
