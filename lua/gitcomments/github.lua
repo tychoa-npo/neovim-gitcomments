@@ -5,27 +5,25 @@ local M = {}
 ---@param cmd string[]
 ---@param callback fun(ok: boolean, stdout: string, stderr: string)
 local function run(cmd, callback)
-  local stdout_lines = {}
-  local stderr_lines = {}
+  -- jobstart delivers stdout as chunks where the last element of each chunk
+  -- is a partial line continued by the first element of the next chunk.
+  -- We keep a running buffer to correctly reconstruct the full output.
+  local stdout_buf = { "" }
+  local stderr_buf = { "" }
+
+  local function collect(buf, data)
+    buf[#buf] = buf[#buf] .. data[1]
+    for i = 2, #data do
+      table.insert(buf, data[i])
+    end
+  end
 
   vim.fn.jobstart(cmd, {
-    on_stdout = function(_, data)
-      for _, line in ipairs(data) do
-        if line ~= "" then
-          table.insert(stdout_lines, line)
-        end
-      end
-    end,
-    on_stderr = function(_, data)
-      for _, line in ipairs(data) do
-        if line ~= "" then
-          table.insert(stderr_lines, line)
-        end
-      end
-    end,
+    on_stdout = function(_, data) collect(stdout_buf, data) end,
+    on_stderr = function(_, data) collect(stderr_buf, data) end,
     on_exit = function(_, exit_code)
-      local out = table.concat(stdout_lines, "\n")
-      local err = table.concat(stderr_lines, "\n")
+      local out = table.concat(stdout_buf, "\n")
+      local err = table.concat(stderr_buf, "\n")
       callback(exit_code == 0, out, err)
     end,
   })

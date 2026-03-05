@@ -20,8 +20,9 @@ local function format_thread(thread)
   for i, comment in ipairs(thread.comments or {}) do
     local author = (comment.author and comment.author.login) or "unknown"
     local date = ""
-    if comment.createdAt then
-      date = " · " .. comment.createdAt:match("^(%d%d%d%d%-%d%d%-%d%d)")
+    if comment.createdAt and comment.createdAt ~= "" then
+      local d = comment.createdAt:match("^(%d%d%d%d%-%d%d%-%d%d)")
+      if d then date = " · " .. d end
     end
 
     if i > 1 then
