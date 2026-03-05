@@ -56,6 +56,7 @@ function M.load_comments(bufnr, opts)
   opts = opts or {}
 
   get_repo_root(bufnr, function(root)
+    local ok, err = pcall(function()
     if not root then return end
 
     -- Don't double-fetch unless forced
@@ -68,16 +69,18 @@ function M.load_comments(bufnr, opts)
     loading[root] = true
 
     github.get_current_branch(root, function(branch)
+      local ok2, err2 = pcall(function()
       if not branch or branch == "HEAD" then
         loading[root] = false
         return
       end
 
-      github.find_pr_for_branch(branch, function(pr_number, err)
+      github.find_pr_for_branch(branch, function(pr_number, pr_err)
+        local ok3, err3 = pcall(function()
         if not pr_number then
           loading[root] = false
-          if err then
-            vim.notify("[gitcomments] " .. err, vim.log.levels.INFO)
+          if pr_err then
+            vim.notify("[gitcomments] " .. pr_err, vim.log.levels.INFO)
           end
           return
         end
@@ -85,6 +88,7 @@ function M.load_comments(bufnr, opts)
         vim.notify(string.format("[gitcomments] Loading comments for PR #%d…", pr_number), vim.log.levels.INFO)
 
         github.get_repo_info(root, function(repo_info, info_err)
+          local ok4, err4 = pcall(function()
           if not repo_info then
             loading[root] = false
             vim.notify("[gitcomments] " .. (info_err or "Could not determine repo"), vim.log.levels.ERROR)
@@ -92,6 +96,7 @@ function M.load_comments(bufnr, opts)
           end
 
           github.fetch_review_comments(pr_number, repo_info.owner, repo_info.name, function(raw_comments, fetch_err)
+            local ok5, err5 = pcall(function()
             loading[root] = false
             if not raw_comments then
               vim.notify("[gitcomments] Failed to fetch PR comments: " .. (fetch_err or ""), vim.log.levels.ERROR)
@@ -109,10 +114,15 @@ function M.load_comments(bufnr, opts)
 
             local count = #comments.all_locations(root)
             vim.notify(string.format("[gitcomments] Loaded %d commented line(s) from PR #%d", count, pr_number), vim.log.levels.INFO)
+            end) if not ok5 then loading[root] = false; vim.notify("[gitcomments] ERROR (fetch): " .. tostring(err5), vim.log.levels.ERROR) end
           end)
+          end) if not ok4 then loading[root] = false; vim.notify("[gitcomments] ERROR (repo_info): " .. tostring(err4), vim.log.levels.ERROR) end
         end)
+        end) if not ok3 then loading[root] = false; vim.notify("[gitcomments] ERROR (pr): " .. tostring(err3), vim.log.levels.ERROR) end
       end)
+      end) if not ok2 then loading[root] = false; vim.notify("[gitcomments] ERROR (branch): " .. tostring(err2), vim.log.levels.ERROR) end
     end)
+    end) if not ok then vim.notify("[gitcomments] ERROR (root): " .. tostring(err), vim.log.levels.ERROR) end
   end)
 end
 
