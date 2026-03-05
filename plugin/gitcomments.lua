@@ -42,6 +42,7 @@ vim.api.nvim_create_user_command("GitCommentsDebug", function()
   local dir = vim.fn.fnamemodify(buf_path, ":h")
   vim.notify("[gitcomments] buf=" .. buf_path, vim.log.levels.INFO)
   vim.fn.jobstart({ "git", "-C", dir, "rev-parse", "--show-toplevel" }, {
+    stdin = "null",
     on_stdout = function(_, data) vim.schedule(function()
       vim.notify("[gitcomments] repo_root: " .. table.concat(data, " "), vim.log.levels.INFO)
     end) end,
@@ -51,6 +52,7 @@ vim.api.nvim_create_user_command("GitCommentsDebug", function()
     on_exit = function(_, code) vim.schedule(function()
       vim.notify("[gitcomments] git exit=" .. code, vim.log.levels.INFO)
       vim.fn.jobstart({ "git", "-C", dir, "rev-parse", "--abbrev-ref", "HEAD" }, {
+          stdin = "null",
         on_stdout = function(_, d) vim.schedule(function()
           vim.notify("[gitcomments] branch: " .. table.concat(d, " "), vim.log.levels.INFO)
         end) end,

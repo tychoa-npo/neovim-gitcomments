@@ -20,6 +20,10 @@ local function run(cmd, callback)
   end
 
   vim.fn.jobstart(cmd, {
+    -- Prevent child processes (gh, git) from inheriting Neovim's terminal
+    -- stdin. Without this, gh can put the TTY into raw mode for interactive
+    -- prompts, which causes "uv_tty_set_mode failed: i/o error" crashes.
+    stdin = "null",
     on_stdout = function(_, data) collect(stdout_buf, data) end,
     on_stderr = function(_, data) collect(stderr_buf, data) end,
     on_exit = function(_, exit_code)
