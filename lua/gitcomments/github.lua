@@ -45,6 +45,26 @@ function M.get_current_branch(repo_root, callback)
   end)
 end
 
+--- Parse the GitHub owner and repo name from the git remote URL.
+---@param repo_root string
+---@param callback fun(info: {owner: string, name: string}|nil, err: string|nil)
+function M.get_repo_info(repo_root, callback)
+  run({ "git", "-C", repo_root, "remote", "get-url", "origin" }, function(ok, out, err)
+    if not ok then
+      callback(nil, err)
+      return
+    end
+    local url = vim.trim(out)
+    -- Handles both SSH (git@github.com:owner/repo.git) and HTTPS forms
+    local owner, name = url:match("github%.com[:/]([^/]+)/([^/%.]+)")
+    if owner and name then
+      callback({ owner = owner, name = name }, nil)
+    else
+      callback(nil, "Could not parse GitHub owner/repo from remote: " .. url)
+    end
+  end)
+end
+
 --- Find the open PR number for the given branch using gh CLI.
 ---@param branch string
 ---@param callback fun(pr_number: integer|nil, err: string|nil)
@@ -69,25 +89,28 @@ function M.find_pr_for_branch(branch, callback)
   end)
 end
 
---- Fetch review threads for the given PR number.
---- Returns a list of reviewThread objects from the GitHub API.
+--- Fetch all inline review comments for a PR via the REST API.
+--- Uses per_page=100 (the API maximum) to minimise requests.
 ---@param pr_number integer
----@param callback fun(threads: table[]|nil, err: string|nil)
-function M.fetch_review_threads(pr_number, callback)
-  run({
-    "gh", "pr", "view", tostring(pr_number),
-    "--json", "reviewThreads",
-  }, function(ok, out, err)
+---@param owner string
+---@param repo string
+---@param callback fun(comments: table[]|nil, err: string|nil)
+function M.fetch_review_comments(pr_number, owner, repo, callback)
+  local path = string.format(
+    "/repos/%s/%s/pulls/%d/comments?per_page=100",
+    owner, repo, pr_number
+  )
+  run({ "gh", "api", path }, function(ok, out, err)
     if not ok then
       callback(nil, err)
       return
     end
     local ok_parse, data = pcall(vim.fn.json_decode, out)
     if not ok_parse or type(data) ~= "table" then
-      callback(nil, "Failed to parse PR data")
+      callback(nil, "Failed to parse PR comments")
       return
     end
-    callback(data.reviewThreads or {}, nil)
+    callback(data, nil)
   end)
 end
 
