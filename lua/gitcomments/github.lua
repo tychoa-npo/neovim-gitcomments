@@ -12,6 +12,7 @@ local function run(cmd, callback)
   local stderr_buf = { "" }
 
   local function collect(buf, data)
+    if not data or #data == 0 then return end
     buf[#buf] = buf[#buf] .. data[1]
     for i = 2, #data do
       table.insert(buf, data[i])
@@ -24,7 +25,9 @@ local function run(cmd, callback)
     on_exit = function(_, exit_code)
       local out = table.concat(stdout_buf, "\n")
       local err = table.concat(stderr_buf, "\n")
-      callback(exit_code == 0, out, err)
+      vim.schedule(function()
+        callback(exit_code == 0, out, err)
+      end)
     end,
   })
 end
